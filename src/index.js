@@ -10,10 +10,10 @@ async function insertLog(env, data) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?)
   `).bind(
     new Date().toISOString(),
-   data.userid|| ",data.username|| ",data.command|| ",
-     data.action|| ",data.text|| ",data.channelid|| ",data.channelname|| ",
-     data.raw|| ",data.error|| ",data.request_id|| ",data.status|| ",
-     data.message_ts|| ",data.trigger_id|| "
+   data.userid|| "",data.username|| "",data.command|| "",
+     data.action|| "",data.text|| "",data.channelid|| "",data.channelname|| "",
+     data.raw|| "",data.error|| "",data.request_id|| "",data.status|| "",
+     data.message_ts|| "",data.trigger_id|| ""
   ).run();
 }
 
