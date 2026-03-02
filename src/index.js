@@ -6,35 +6,14 @@ import crypto from "crypto";
 async function insertLog(env, data) {
   await env.DB.prepare(`
     INSERT INTO logs (
-      time,
-      raw,
-      command,
-      userid,
-      username,
-      channelid,
-      channelname,
-      action,
-      error,
-      trigger_id,
-      request_id,
-      status,
-      message_ts,text
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?, ?)
+         time,userid,username,command,action,text,channelid,channelname,raw,error,request_id,status,message_ts,trigger_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?)
   `).bind(
     new Date().toISOString(),
-    data.raw || "",
-    data.command || "",
-    data.userid || "",
-    data.username || "",
-    data.channelid || "",
-    data.channelname || "",
-    data.action || "",
-    data.error || "",
-    data.trigger_id || "",
-    data.request_id || "",
-    data.status || "",
-    data.message_ts || "",
-     data.text || ""
+   data.userid|| ",data.username|| ",data.command|| ",
+     data.action|| ",data.text|| ",data.channelid|| ",data.channelname|| ",
+     data.raw|| ",data.error|| ",data.request_id|| ",data.status|| ",
+     data.message_ts|| ",data.trigger_id|| "
   ).run();
 }
 
