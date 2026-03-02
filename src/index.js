@@ -2,12 +2,11 @@ import { verifySlackRequest } from "./utils/verifySlack";
 
 export default {
   async fetch(request, env) {
-    // chỉ cho phép POST (Slack webhook)
-    if (request.method !== "POST") {
-      return new Response("Method Not Allowed", { status: 405 });
+
+    if (request.method === "GET") {
+      return new Response("Slack Worker Running");
     }
 
-    // verify chữ ký Slack
     const isValid = await verifySlackRequest(
       request,
       env.SLACK_SIGNING_SECRET
@@ -17,13 +16,16 @@ export default {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    // đọc body sau khi verify
     const bodyText = await request.text();
+    const params = new URLSearchParams(bodyText);
+
+    const user = params.get("user_name");
+    const text = params.get("text");
 
     return new Response(
       JSON.stringify({
-        ok: true,
-        received: bodyText
+        response_type: "in_channel",
+        text: `Xin chào ${user} 👋 Bạn vừa nhập: ${text}`
       }),
       {
         headers: { "Content-Type": "application/json" }
