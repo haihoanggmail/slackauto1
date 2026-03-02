@@ -6,12 +6,13 @@ export async function verifySlackRequest(request, signingSecret) {
     return false;
   }
 
-  // chống replay attack (5 phút)
+  // chống replay attack (quá 5 phút thì reject)
   const now = Math.floor(Date.now() / 1000);
   if (Math.abs(now - Number(timestamp)) > 60 * 5) {
     return false;
   }
 
+  // clone request để không làm mất body
   const body = await request.clone().text();
 
   const baseString = `v0:${timestamp}:${body}`;
@@ -41,7 +42,7 @@ export async function verifySlackRequest(request, signingSecret) {
   return timingSafeEqual(expectedSignature, signature);
 }
 
-// tránh timing attack
+// chống timing attack
 function timingSafeEqual(a, b) {
   if (a.length !== b.length) return false;
   let result = 0;
