@@ -15,7 +15,7 @@ async function insertLog(env, data) {
     data.username || "",
     data.command || "",
     data.action || "",
-    data.text || "",
+    data.text || " error text ...",
     data.channelid || "",
     data.channelname || "",
     data.raw || "",
