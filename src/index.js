@@ -60,9 +60,9 @@ export default {
 
     const bodyText = await request.text();
 
-    /* =========================
-       INTERACTIVE BUTTON
-    ========================== */
+    /* =====================================================
+       INTERACTIVE BUTTON CLICK
+    ===================================================== */
     if (bodyText.startsWith("payload=")) {
 
       const payload = JSON.parse(
@@ -70,8 +70,9 @@ export default {
       );
 
       const action = payload.actions[0].action_id;
-      const user = payload.user.username;
       const request_id = payload.actions[0].value;
+      const user = payload.user.username;
+      const message_ts = payload.message.ts;
       const responseUrl = payload.response_url;
 
       await updateStatus(env, request_id, action);
@@ -82,7 +83,8 @@ export default {
         username: user,
         action: action,
         request_id: request_id,
-        status: action
+        status: action,
+        message_ts: message_ts
       });
 
       await fetch(responseUrl, {
@@ -97,9 +99,9 @@ export default {
       return new Response("", { status: 200 });
     }
 
-    /* =========================
+    /* =====================================================
        SLASH COMMAND
-    ========================== */
+    ===================================================== */
 
     const params = new URLSearchParams(bodyText);
     const body = Object.fromEntries(params);
@@ -111,12 +113,12 @@ export default {
 
     await insertLog(env, {
       raw: bodyText,
-      command: text,
+      command: body.command,
       userid: body.user_id,
       username: user,
       channelid: body.channel_id,
       channelname: body.channel_name,
-      action: body.command,
+      action: "slash_command",
       trigger_id: body.trigger_id,
       request_id: request_id,
       status: "pending"
