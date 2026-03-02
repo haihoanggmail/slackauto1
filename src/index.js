@@ -1,33 +1,33 @@
-import { router } from "./core/router";
 import { verifySlackRequest } from "./utils/verifySlack";
-import { parseBody } from "./utils/parseBody";
 
 export default {
-  async fetch(request, env, ctx) {
-    try {
-      if (request.method !== "POST") {
-        return new Response("Not allowed", { status: 405 });
-      }
-
-      // Verify Slack signature
-      const isValid = await verifySlackRequest(request, env);
-      if (!isValid) {
-        return new Response("Unauthorized", { status: 401 });
-      }
-
-      // Parse body (Slack gửi form-urlencoded)
-      const body = await parseBody(request);
-
-      // Route request
-      const result = await router(body, env);
-
-      return new Response(JSON.stringify(result), {
-        headers: { "Content-Type": "application/json" }
-      });
-
-    } catch (err) {
-      console.error(err);
-      return new Response("Internal Error", { status: 500 });
+  async fetch(request, env) {
+    // chỉ cho phép POST (Slack webhook)
+    if (request.method !== "POST") {
+      return new Response("Method Not Allowed", { status: 405 });
     }
+
+    // verify chữ ký Slack
+    const isValid = await verifySlackRequest(
+      request,
+      env.SLACK_SIGNING_SECRET
+    );
+
+    if (!isValid) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    // đọc body sau khi verify
+    const bodyText = await request.text();
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        received: bodyText
+      }),
+      {
+        headers: { "Content-Type": "application/json" }
+      }
+    );
   }
 };
