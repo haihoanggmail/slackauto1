@@ -1,5 +1,29 @@
 import { verifySlackRequest } from "./utils/verifySlack";
 
+async function saveLog(env, data) {
+  try {
+    await env.DB.prepare(`
+      INSERT INTO logs 
+      (time, raw, command, userid, username, channelid, channelname, action, error)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    .bind(
+      new Date().toISOString(),
+      data.raw || "",
+      data.command || "",
+      data.userid || "",
+      data.username || "",
+      data.channelid || "",
+      data.channelname || "",
+      data.action || "",
+      data.error || ""
+    )
+    .run();
+  } catch (err) {
+    console.error("D1 log error:", err);
+  }
+}
+
 export default {
   async fetch(request, env) {
 
@@ -7,92 +31,79 @@ export default {
       return new Response("Slack Worker Running");
     }
 
-    const isValid = await verifySlackRequest(
-      request,
-      env.SLACK_SIGNING_SECRET
-    );
+    const rawBody = await request.clone().text();
 
-    if (!isValid) {
-      return new Response("Unauthorized", { status: 401 });
-    }
+    let logData = {
+      raw: rawBody
+    };
 
-    const bodyText = await request.text();
+    try {
 
-    // Slash command
-    if (bodyText.startsWith("token=")) {
-
-      const params = new URLSearchParams(bodyText);
-      const user = params.get("user_name");
-      const text = params.get("text");
-
-      return new Response(
-        JSON.stringify({
-          response_type: "in_channel",
-          blocks: [
-            {
-              type: "section",
-              text: {
-                type: "mrkdwn",
-                text: `*${user}* yêu cầu: ${text}`
-              }
-            },
-            {
-              type: "actions",
-              elements: [
-                {
-                  type: "button",
-                  text: {
-                    type: "plain_text",
-                    text: "✅ Confirm"
-                  },
-                  style: "primary",
-                  value: text,
-                  action_id: "confirm_action"
-                },
-                {
-                  type: "button",
-                  text: {
-                    type: "plain_text",
-                    text: "❌ Cancel"
-                  },
-                  style: "danger",
-                  value: text,
-                  action_id: "cancel_action"
-                }
-              ]
-            }
-          ]
-        }),
-        { headers: { "Content-Type": "application/json" } }
+      const isValid = await verifySlackRequest(
+        request,
+        env.SLACK_SIGNING_SECRET
       );
-    }
 
-    // Interactive button click
-    const payload = new URLSearchParams(bodyText).get("payload");
+      if (!isValid) {
+        logData.error = "Invalid signature";
+        await saveLog(env, logData);
+        return new Response("Unauthorized", { status: 401 });
+      }
 
-    if (payload) {
-      const data = JSON.parse(payload);
-      const action = data.actions[0];
+      // Slash command
+      if (rawBody.startsWith("token=")) {
 
-      if (action.action_id === "confirm_action") {
+        const params = new URLSearchParams(rawBody);
+
+        logData.command = params.get("command");
+        logData.userid = params.get("user_id");
+        logData.username = params.get("user_name");
+        logData.channelid = params.get("channel_id");
+        logData.channelname = params.get("channel_name");
+        logData.action = "slash_command";
+
+        await saveLog(env, logData);
+
         return new Response(
           JSON.stringify({
-            text: `✅ Đã xác nhận: ${action.value}`
+            response_type: "in_channel",
+            text: `Đã ghi log thành công`
           }),
           { headers: { "Content-Type": "application/json" } }
         );
       }
 
-      if (action.action_id === "cancel_action") {
+      // Interactive action
+      const payload = new URLSearchParams(rawBody).get("payload");
+
+      if (payload) {
+
+        const data = JSON.parse(payload);
+        const actionObj = data.actions[0];
+
+        logData.userid = data.user.id;
+        logData.username = data.user.username;
+        logData.channelid = data.channel.id;
+        logData.channelname = data.channel.name;
+        logData.action = actionObj.action_id;
+
+        await saveLog(env, logData);
+
         return new Response(
           JSON.stringify({
-            text: `❌ Đã hủy: ${action.value}`
+            text: `Action ${actionObj.action_id} đã được log`
           }),
           { headers: { "Content-Type": "application/json" } }
         );
       }
-    }
 
-    return new Response("OK");
+      await saveLog(env, logData);
+      return new Response("OK");
+
+    } catch (err) {
+      logData.error = err.message;
+      await saveLog(env, logData);
+      return new Response("Internal Error", { status: 500 });
+    }
   }
 };
