@@ -6,9 +6,20 @@ import crypto from "crypto";
 async function insertLog(env, data) {
   await env.DB.prepare(`
     INSERT INTO logs (
-      time, raw, command, userid, username,
-      channelid, channelname, action, error
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      time,
+      raw,
+      command,
+      userid,
+      username,
+      channelid,
+      channelname,
+      action,
+      error,
+      trigger_id,
+      request_id,
+      status,
+      message_ts
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     new Date().toISOString(),
     data.raw || "",
@@ -18,12 +29,27 @@ async function insertLog(env, data) {
     data.channelid || "",
     data.channelname || "",
     data.action || "",
-    data.error || ""
+    data.error || "",
+    data.trigger_id || "",
+    data.request_id || "",
+    data.status || "",
+    data.message_ts || ""
   ).run();
 }
 
 /* =========================
-   Main Worker
+   Update Status
+========================= */
+async function updateStatus(env, request_id, status) {
+  await env.DB.prepare(`
+    UPDATE logs
+    SET status = ?
+    WHERE request_id = ?
+  `).bind(status, request_id).run();
+}
+
+/* =========================
+   MAIN WORKER
 ========================= */
 export default {
   async fetch(request, env) {
@@ -35,7 +61,7 @@ export default {
     const bodyText = await request.text();
 
     /* =========================
-       INTERACTIVE BUTTON CLICK
+       INTERACTIVE BUTTON
     ========================== */
     if (bodyText.startsWith("payload=")) {
 
@@ -45,16 +71,20 @@ export default {
 
       const action = payload.actions[0].action_id;
       const user = payload.user.username;
+      const request_id = payload.actions[0].value;
       const responseUrl = payload.response_url;
+
+      await updateStatus(env, request_id, action);
 
       await insertLog(env, {
         raw: JSON.stringify(payload),
         userid: payload.user.id,
         username: user,
-        action: action
+        action: action,
+        request_id: request_id,
+        status: action
       });
 
-      // Cập nhật tin nhắn
       await fetch(responseUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -74,6 +104,8 @@ export default {
     const params = new URLSearchParams(bodyText);
     const body = Object.fromEntries(params);
 
+    const request_id = crypto.randomUUID();
+
     const user = body.user_name;
     const text = body.text;
 
@@ -84,7 +116,10 @@ export default {
       username: user,
       channelid: body.channel_id,
       channelname: body.channel_name,
-      action: body.command
+      action: body.command,
+      trigger_id: body.trigger_id,
+      request_id: request_id,
+      status: "pending"
     });
 
     return new Response(
@@ -105,18 +140,21 @@ export default {
                 type: "button",
                 text: { type: "plain_text", text: "Xác nhận" },
                 style: "primary",
-                action_id: "xác nhận"
+                action_id: "confirmed",
+                value: request_id
               },
               {
                 type: "button",
                 text: { type: "plain_text", text: "Báo sai" },
                 style: "danger",
-                action_id: "báo sai"
+                action_id: "rejected",
+                value: request_id
               },
               {
                 type: "button",
                 text: { type: "plain_text", text: "Hủy" },
-                action_id: "hủy"
+                action_id: "cancelled",
+                value: request_id
               }
             ]
           }
