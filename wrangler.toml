@@ -1,4 +1,8 @@
-
 name = "slackauto1"
 main = "src/index.js"
 compatibility_date = "2024-12-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "slack_automation_db"   # đổi đúng tên DB của bạn
+database_id = "5754a7fc-b82e-4614-9b63-9d1b3c1b3d80"  # lấy trong Cloudflare dashboard
