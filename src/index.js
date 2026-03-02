@@ -1,19 +1,29 @@
-import crypto from "crypto";
-
 /* =========================
    Insert Log
 ========================= */
 async function insertLog(env, data) {
   await env.DB.prepare(`
     INSERT INTO logs (
-         time,userid,username,command,action,text,channelid,channelname,raw,error,request_id,status,message_ts,trigger_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?)
+      time, userid, username, command, action, text,
+      channelid, channelname, raw, error,
+      request_id, status, message_ts, trigger_id
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     new Date().toISOString(),
-   data.userid|| "",data.username|| "",data.command|| "",
-     data.action|| "",data.text|| "...",data.channelid|| "",data.channelname|| "",
-     data.raw|| "",data.error|| "",data.request_id|| "",data.status|| "",
-     data.message_ts|| "",data.trigger_id|| ""
+    data.userid || "",
+    data.username || "",
+    data.command || "",
+    data.action || "",
+    data.text || "",
+    data.channelid || "",
+    data.channelname || "",
+    data.raw || "",
+    data.error || "",
+    data.request_id || "",
+    data.status || "",
+    data.message_ts || "",
+    data.trigger_id || ""
   ).run();
 }
 
@@ -49,17 +59,17 @@ export default {
         decodeURIComponent(bodyText.replace("payload=", ""))
       );
 
-      const action = payload.actions[0].action_id;
-      const request_id = payload.actions[0].value;
-      const user = payload.user.username;
-      const message_ts = payload.message.ts;
+      const action = payload.actions?.[0]?.action_id || "";
+      const request_id = payload.actions?.[0]?.value || "";
+      const user = payload.user?.username || "";
+      const message_ts = payload.message?.ts || "";
       const responseUrl = payload.response_url;
 
       await updateStatus(env, request_id, action);
 
       await insertLog(env, {
         raw: JSON.stringify(payload),
-        userid: payload.user.id,
+        userid: payload.user?.id,
         username: user,
         action: action,
         request_id: request_id,
@@ -99,6 +109,7 @@ export default {
       channelid: body.channel_id,
       channelname: body.channel_name,
       action: "slash_command",
+      text: text,
       trigger_id: body.trigger_id,
       request_id: request_id,
       status: "pending"
