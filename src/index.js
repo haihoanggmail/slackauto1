@@ -18,8 +18,8 @@ async function insertLog(env, data) {
       trigger_id,
       request_id,
       status,
-      message_ts
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      message_ts,text
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?, ?)
   `).bind(
     new Date().toISOString(),
     data.raw || "",
@@ -33,7 +33,8 @@ async function insertLog(env, data) {
     data.trigger_id || "",
     data.request_id || "",
     data.status || "",
-    data.message_ts || ""
+    data.message_ts || "",
+     data.text || ""
   ).run();
 }
 
