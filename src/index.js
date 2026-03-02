@@ -1,75 +1,25 @@
 import crypto from "crypto";
 
 /* =========================
-   Verify Slack Signature
-========================= */
-async function verifySlackSignature(request, signingSecret) {
-  const timestamp = request.headers.get("x-slack-request-timestamp");
-  const signature = request.headers.get("x-slack-signature");
-
-  if (!timestamp || !signature) return false;
-
-  const body = await request.clone().text();
-  const baseString = `v0:${timestamp}:${body}`;
-
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(signingSecret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-
-  const hash = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    encoder.encode(baseString)
-  );
-
-  const computed =
-    "v0=" +
-    Array.from(new Uint8Array(hash))
-      .map(b => b.toString(16).padStart(2, "0"))
-      .join("");
-
-  return crypto.timingSafeEqual(
-    Buffer.from(computed),
-    Buffer.from(signature)
-  );
-}
-
-/* =========================
-   Insert Log to D1
+   Insert Log
 ========================= */
 async function insertLog(env, data) {
-  try {
-    await env.DB.prepare(`
-      INSERT INTO logs (
-        time,
-        raw,
-        command,
-        userid,
-        username,
-        channelid,
-        channelname,
-        action,
-        error
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      new Date().toISOString(),
-      data.raw || "",
-      data.command || "",
-      data.userid || "",
-      data.username || "",
-      data.channelid || "",
-      data.channelname || "",
-      data.action || "",
-      data.error || ""
-    ).run();
-  } catch (e) {
-    console.log("D1 insert error:", e);
-  }
+  await env.DB.prepare(`
+    INSERT INTO logs (
+      time, raw, command, userid, username,
+      channelid, channelname, action, error
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    new Date().toISOString(),
+    data.raw || "",
+    data.command || "",
+    data.userid || "",
+    data.username || "",
+    data.channelid || "",
+    data.channelname || "",
+    data.action || "",
+    data.error || ""
+  ).run();
 }
 
 /* =========================
@@ -82,69 +32,97 @@ export default {
       return new Response("Not allowed", { status: 405 });
     }
 
-    try {
-      /* ===== Verify Slack ===== */
-      const isValid = await verifySlackSignature(
-        request,
-        env.SLACK_SIGNING_SECRET
+    const bodyText = await request.text();
+
+    /* =========================
+       INTERACTIVE BUTTON CLICK
+    ========================== */
+    if (bodyText.startsWith("payload=")) {
+
+      const payload = JSON.parse(
+        decodeURIComponent(bodyText.replace("payload=", ""))
       );
 
-      if (!isValid) {
-        await insertLog(env, {
-          raw: await request.clone().text(),
-          action: "invalid_signature",
-          error: "Slack signature invalid"
-        });
-
-        return new Response("Invalid signature", { status: 401 });
-      }
-
-      /* ===== Parse Body ===== */
-      const bodyText = await request.text();
-      const params = new URLSearchParams(bodyText);
-
-      const body = Object.fromEntries(params);
-
-      /* ===== Always Log Raw First ===== */
-      await insertLog(env, {
-        raw: JSON.stringify(body),
-        command: body.text,
-        userid: body.user_id,
-        username: body.user_name,
-        channelid: body.channel_id,
-        channelname: body.channel_name,
-        action: body.command || "unknown",
-        error: ""
-      });
-
-      /* ===== Handle Slash Command ===== */
-      if (body.command === "/hello") {
-        return new Response(
-          JSON.stringify({
-            response_type: "in_channel",
-            text: `Xin chào ${body.user_name} 👋 Bạn vừa nhập: ${body.text}`
-          }),
-          { headers: { "Content-Type": "application/json" } }
-        );
-      }
-
-      return new Response(
-        JSON.stringify({
-          response_type: "ephemeral",
-          text: "Command không hợp lệ."
-        }),
-        { headers: { "Content-Type": "application/json" } }
-      );
-
-    } catch (err) {
+      const action = payload.actions[0].action_id;
+      const user = payload.user.username;
+      const responseUrl = payload.response_url;
 
       await insertLog(env, {
-        raw: "",
-        action: "system_error",
-        error: err.message
+        raw: JSON.stringify(payload),
+        userid: payload.user.id,
+        username: user,
+        action: action
       });
 
-      return new Response("Server error", { status: 500 });
+      // Cập nhật tin nhắn
+      await fetch(responseUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          replace_original: true,
+          text: `${user} đã ${action}`
+        })
+      });
+
+      return new Response("", { status: 200 });
     }
+
+    /* =========================
+       SLASH COMMAND
+    ========================== */
+
+    const params = new URLSearchParams(bodyText);
+    const body = Object.fromEntries(params);
+
+    const user = body.user_name;
+    const text = body.text;
+
+    await insertLog(env, {
+      raw: bodyText,
+      command: text,
+      userid: body.user_id,
+      username: user,
+      channelid: body.channel_id,
+      channelname: body.channel_name,
+      action: body.command
+    });
+
+    return new Response(
+      JSON.stringify({
+        response_type: "in_channel",
+        blocks: [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `Đã nhận tin nhắn của *${user}*\nNội dung: *${text}*`
+            }
+          },
+          {
+            type: "actions",
+            elements: [
+              {
+                type: "button",
+                text: { type: "plain_text", text: "Xác nhận" },
+                style: "primary",
+                action_id: "xác nhận"
+              },
+              {
+                type: "button",
+                text: { type: "plain_text", text: "Báo sai" },
+                style: "danger",
+                action_id: "báo sai"
+              },
+              {
+                type: "button",
+                text: { type: "plain_text", text: "Hủy" },
+                action_id: "hủy"
+              }
+            ]
+          }
+        ]
+      }),
+      { headers: { "Content-Type": "application/json" } }
+    );
   }
 };
